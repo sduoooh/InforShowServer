@@ -1,6 +1,7 @@
-package main
+package inforShowServer
 
 import (
 )
+
 func main() {
 }

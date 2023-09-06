@@ -1,4 +1,0 @@
-package qq
-
-import (
-)

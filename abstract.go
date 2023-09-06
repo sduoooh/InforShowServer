@@ -1,4 +1,4 @@
-package abstract
+package inforShowServer
 
 import (
 	"time"
@@ -27,7 +27,7 @@ type taskMasterInfor[A any, I any, C any, U any] struct {
 	name string // the name of the app
 	existTask map[string] *taskInfor[A, I, C, U] // key is the task identifier
 	sourceAddress string // the address of this task' app 
-	creater func() (*taskInfor[A, I, C, U],error) // the function to create the task
+	creater func() (*taskInfor[A, I, C, U], error) // the function to create the task
 }
 
 
