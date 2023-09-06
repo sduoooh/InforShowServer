@@ -1,3 +1,3 @@
-module api.sduoooh.me/common/modules/get/go/InforShowServer/main
+module github.com/sduoooh/InforShowServer/main
 
 go 1.21.0

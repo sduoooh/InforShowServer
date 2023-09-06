@@ -2,8 +2,7 @@ go 1.21.0
 
 use (
 	./main
-	./abstract/taskmaster
-	./abstract/task
-	./abstract/infor
+	./abstract
+	./app/qq
 	./test
 )
