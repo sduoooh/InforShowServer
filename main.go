@@ -3,5 +3,5 @@ package inforShowServer
 import (
 )
 
-func main() {
+func main () {
 }

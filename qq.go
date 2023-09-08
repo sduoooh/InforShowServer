@@ -1,6 +1,9 @@
 package inforShowServer
 
 import (
+	"regexp"
+	"os"
+	"io"
 )
 
 type qqContentAttr struct {
@@ -33,7 +36,21 @@ type qqUserIdInfor struct {
 	userPassword string
 }
 
+func readPort (url string)  (string ,error) {
+	re, _ := regexp.Compile("[^#]address: 127.0.0.1:([0-9]+[^#])")
+	file, err1 := os.Open(url + "config.yml")
+	if err1 != nil {
+		return "-1" , err1
+	}
+	data, err2 := io.ReadAll(file)
+	if err2 != nil {
+		return "-1" , err2
+	}
+	return re.FindStringSubmatch(string(data))[1], nil
+
+}
+
 func qqServerStart() {
-	//qqTaskMaster := taskMasterInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor]{}
-	//qqTaskMaster.init("qq", )
+	qqTaskMaster := taskMasterInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor]{}
+	qqTaskMaster.init("qq", "../qq/go-cqhttp_windows_amd64.exe",)
 }

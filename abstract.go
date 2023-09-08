@@ -16,6 +16,7 @@ type transInfor[A any, I any, C any] struct {
 }
 
 type taskInfor[A any, I any, C any, U any] struct {
+	occupiedPort []string // the port that the task occupied
 	userIdInfor U// should add the identifier of the app' user , such as the userid and userpassword and so on
 	processId int // the process id of the task
 	uploadChannel  chan transInfor[A, I, C] // the channel to upload the infor
@@ -26,6 +27,7 @@ type taskInfor[A any, I any, C any, U any] struct {
 type taskMasterInfor[A any, I any, C any, U any] struct {
 	name string // the name of the app
 	existTask map[string] *taskInfor[A, I, C, U] // key is the task identifier
+	occupiedPort []string // the port that the task occupied
 	sourceAddress string // the address of this task' app 
 	creater func() (*taskInfor[A, I, C, U], error) // the function to create the task
 }
@@ -40,7 +42,8 @@ func (taskMaster *taskMasterInfor[A, I, C, U]) init(name string, sourceAddress s
 
 func (taskMaster *taskMasterInfor[A, I, C, U]) addTask (taskId string) error {
 	taskPointer, createError := taskMaster.creater()
-	taskMaster.existTask[taskId] = taskPointer		
+	taskMaster.existTask[taskId] = taskPointer	
+	taskMaster.occupiedPort = append(taskMaster.occupiedPort, taskPointer.occupiedPort...)
 	return createError	
 }
 
