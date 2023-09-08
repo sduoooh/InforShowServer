@@ -26,14 +26,16 @@ type taskInfor[A any, I any, C any, U any] struct {
 
 type taskMasterInfor[A any, I any, C any, U any] struct {
 	name string // the name of the app
+	isHorizontalExpansion bool // if the task is horizontal expansion
+	entranceList []string // the entrance of the task
 	existTask map[string] *taskInfor[A, I, C, U] // key is the task identifier
 	occupiedPort []string // the port that the task occupied
 	sourceAddress string // the address of this task' app 
-	creater func() (*taskInfor[A, I, C, U], error) // the function to create the task
+	creater func(string) (*taskInfor[A, I, C, U], error) // the function to create the task， if isHorizontalExpansion is true, the parameter of the creater is ''
 }
 
 
-func (taskMaster *taskMasterInfor[A, I, C, U]) init(name string, sourceAddress string, creater func(string) func() (*taskInfor[A, I, C, U],error) ) {
+func (taskMaster *taskMasterInfor[A, I, C, U]) init(name string,isHorizontalExpansion bool, sourceAddress string,entranceList []string, creater func(string) func(string) (*taskInfor[A, I, C, U],error) ) {
 	taskMaster.name = name
 	taskMaster.sourceAddress = sourceAddress
 	taskMaster.existTask = make(map[string] *taskInfor[A, I, C, U])

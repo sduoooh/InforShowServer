@@ -52,5 +52,10 @@ func readPort (url string)  (string ,error) {
 
 func qqServerStart() {
 	qqTaskMaster := taskMasterInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor]{}
-	qqTaskMaster.init("qq", "../qq/go-cqhttp_windows_amd64.exe",)
+	creater := func(sourceAddress string) func(string) (*taskInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor], error) {
+		return func(taskId string) (*taskInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor], error) {
+			return nil, nil
+		}
+	}
+	qqTaskMaster.init("qq", false, "../qq", ["/3101522606"], )
 }
