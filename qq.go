@@ -60,5 +60,5 @@ func qqServerStart() {
 			return nil, nil
 		}
 	}
-	qqTaskMaster.init("qq", false, "../qq", ["/3101522606"], )
+	qqTaskMaster.init("qq", false, "../qq", ["/123456"], )
 }
