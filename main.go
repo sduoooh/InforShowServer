@@ -1,7 +1,4 @@
-package inforShowServer
-
-import (
-)
-
-func main () {
+package main
+func main() {
+	qqServerInit()
 }

@@ -1,9 +1,7 @@
-package inforShowServer
+package main
 
 import (
 	"regexp"
-	"os"
-	"io"
 )
 
 // 注意，为方便传递，qq中的id都是int类型，但是本程序内部传递的id为string.
@@ -36,29 +34,37 @@ type qqContentSet struct {
 
 type qqUserIdInfor struct {
 	userId int
-	userPassword string
 }
 
 func readPort (url string)  (string ,error) {
-	re, _ := regexp.Compile("[^#]address: 127.0.0.1:([0-9]+[^#])")
-	file, err1 := os.Open(url + "config.yml")
-	if err1 != nil {
-		return "-1" , err1
+	re, _ := regexp.Compile(url + "config.yml")
+	data, err := fileOperater(url + "config.yml", fileOperaterOptions{operater: "read"})
+	if err != nil {
+		return "-1" , err
 	}
-	data, err2 := io.ReadAll(file)
-	if err2 != nil {
-		return "-1" , err2
-	}
-	return re.FindStringSubmatch(string(data))[1], nil
-
+	return re.FindStringSubmatch(data[0])[1], nil
 }
 
-func qqServerStart() {
-	qqTaskMaster := taskMasterInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor]{}
-	creater := func(sourceAddress string) func(string) (*taskInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor], error) {
-		return func(taskId string) (*taskInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor], error) {
-			return nil, nil
-		}
+func creater (sourceAddress string, occupiedPort *map[string]portInfor) func(string) (*taskInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor], error) {
+	return func (entrance string) (*taskInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor], error) {
+		// 尚待施工，需要先确定特定环境文件夹内容构造；
+		// 目前认为还需使在其中读取一些信息，如预期使用的端口号及qq号等，后期或许在此预读数据库
+
+
+		// 先注起来，没施工完，防止恼人的unused警告
+		// port, err := readPort(sourceAddress + entrance + "/")
+		// if err != nil {
+		// 	return nil, err
+		// }
+
+		return nil, nil
 	}
-	qqTaskMaster.init("qq", false, "../qq", ["/123456"], )
+}
+
+func qqServerInit() {
+	entranceList := map[string]string{ // 应当在文件里读，这里先预存一个方便开发
+		"123456789": "123456789",
+	}
+	qqTaskMaster := taskMasterInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor]{}
+	qqTaskMaster.init("qq", false, "../qq", entranceList, creater)
 }
