@@ -19,10 +19,10 @@ type fileOperaterOptions struct {
 // 对于返回值[]string，当operrater为read时，data[0]即为string化后的文本内容；当operater为write时，data[0]为修改前内容， data[1]为修改后内容
 // 当operater为write时，fileOperater总会同步地更改文件内容
 func fileOperater(url string, options fileOperaterOptions) ([]string, error) { 
-	file, err1 := os.Open(url + "config.yml")
+	file, err1 := os.Open(url)
 	if err1 != nil {
 		if options.createble {
-			_, err2 := os.Create(url + "config.yml")
+			_, err2 := os.Create(url)
 			if err2 != nil {
 				return make([]string, 0), err2
 			}

@@ -81,9 +81,9 @@ func creater(sourceAddress string, occupiedPort *map[string]portInfor) func(stri
 	return func(entrance string) (*taskInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor], error) {
 		// 尚待施工，需要先确定特定环境文件夹内容构造；
 		// 目前认为还需使在其中读取一些信息，如预期使用的端口号及qq号等，后期或许在此预读数据库
-
 		task := taskInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor]{}
-		portInfor, err := fileOperater(sourceAddress+entrance+"/qqPortList", fileOperaterOptions{operater: "read", createble: false})
+		fmt.Println(sourceAddress + entrance + "/qqPortList.txt")
+		portInfor, err := fileOperater(sourceAddress+entrance+"/qqPortList.txt", fileOperaterOptions{operater: "read", createble: false})
 		if err != nil {
 			return nil, errors.New("can't read qqPortList")
 		}
@@ -91,14 +91,13 @@ func creater(sourceAddress string, occupiedPort *map[string]portInfor) func(stri
 		task.occupiedPort[0] = portInfor[0]
 		userId, _ := strconv.Atoi(entrance)
 		task.userIdInfor = qqUserIdInfor{userId}
-		task.execution = func() error {
-			return nil
+		task.execution = func() {
 		} // 尚待施工
 		uploadChannel := make(chan transInfor[qqContentAttr, qqHandlerInfor, qqContentSet], 1)
 		downloadChannel := make(chan transInfor[qqContentAttr, qqHandlerInfor, qqContentSet], 1)
 		task.uploadChannel = &uploadChannel
 		task.downloadChannel = &downloadChannel
-		pid, startErr := os.StartProcess(sourceAddress+entrance+"/go-cqhttp_windows_amd64.exe", make([]string, 1), &os.ProcAttr{})
+		pid, startErr := os.StartProcess(sourceAddress+entrance+"/go-cqhttp_windows_amd64.exe", []string{"-faststart"}, &os.ProcAttr{})  // 不能为空参，尚待解决
 		if startErr != nil {
 			return nil, startErr
 		}
@@ -117,15 +116,15 @@ func creater(sourceAddress string, occupiedPort *map[string]portInfor) func(stri
 	}
 }
 
-func qqServerInit() error {
+func qqServerInit() (*taskMasterInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor],error) {
 	qqMap, err := fileOperater("../qq/qqMap.txt", fileOperaterOptions{operater: "read", createble: false})
 	if err != nil {
-		return errors.New("can't read qqMap.txt")
+		return nil ,errors.New("can't read qqMap.txt")
 	}
 	temp := dataStruct{make(map[string]string)}
 	temp.load(qqMap[0])
 	entranceList := temp.data
 	qqTaskMaster := taskMasterInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor]{}
-	qqTaskMaster.init("qq", "../qq", entranceList, creater)
-	return nil
+	qqTaskMaster.init("qq", "../qq/", entranceList, creater)
+	return &qqTaskMaster, nil
 }
