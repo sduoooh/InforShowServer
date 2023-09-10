@@ -20,7 +20,6 @@ type fileOperaterOptions struct {
 // 当operater为write时，fileOperater总会同步地更改文件内容
 func fileOperater(url string, options fileOperaterOptions) ([]string, error) { 
 	file, err1 := os.Open(url + "config.yml")
-	defer file.Close()
 	if err1 != nil {
 		if options.createble {
 			_, err2 := os.Create(url + "config.yml")
@@ -31,6 +30,7 @@ func fileOperater(url string, options fileOperaterOptions) ([]string, error) {
 			return make([]string, 0), err1
 		}
 	}
+	defer file.Close()
 	switch options.operater {
 	case "read":
 		data, err2 := io.ReadAll(file)

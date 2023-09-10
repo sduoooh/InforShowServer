@@ -1,11 +1,13 @@
 package main
 
 import (
-	"bytes"
 	"errors"
-	"os/exec"
+	"github.com/lxzan/gws"
+	kcp "github.com/xtaci/kcp-go"
+	"os"
 	"regexp"
 	"strconv"
+	"fmt"
 )
 
 // 注意，为方便传递，qq中的id都是int类型，但是本程序内部传递的id为string.
@@ -49,6 +51,32 @@ func readPort(url string) (string, error) {
 	return re.FindStringSubmatch(data[0])[1], nil
 }
 
+type QQGwsHandler struct {
+	gws.BuiltinEventHandler
+	logAddr string
+	downloadChannel *chan transInfor[qqContentAttr, qqHandlerInfor, qqContentSet]
+}
+
+func (h *QQGwsHandler) OnMessage(c *gws.Conn, message *gws.Message) {
+	// 获取消息类型和内容
+	opcode := message.Opcode
+	payload := message.Data
+
+	// 根据不同的消息类型进行处理
+	switch opcode {
+	case gws.OpcodeText:
+		fmt.Println(payload.String())
+	case gws.OpcodeBinary:
+		log, err := fileOperater(h.logAddr, fileOperaterOptions{operater: "read"})
+		if err != nil {
+			panic(err)
+		}
+		fileOperater(h.logAddr, fileOperaterOptions{operater: "write", regexp: ".*", replacement: log[0] + payload.String()})
+	default:
+		panic(errors.New("unknown opcode"))
+	}
+}
+
 func creater(sourceAddress string, occupiedPort *map[string]portInfor) func(string) (*taskInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor], error) {
 	return func(entrance string) (*taskInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor], error) {
 		// 尚待施工，需要先确定特定环境文件夹内容构造；
@@ -63,24 +91,29 @@ func creater(sourceAddress string, occupiedPort *map[string]portInfor) func(stri
 		task.occupiedPort[0] = portInfor[0]
 		userId, _ := strconv.Atoi(entrance)
 		task.userIdInfor = qqUserIdInfor{userId}
-		// task.processId = entrance
-		task.execution = func () error {
-		exec.Command()
-		task.uploadChannel = make(chan transInfor[qqContentAttr, qqHandlerInfor, qqContentSet], 1)
-		task.downloadChannel = make(chan transInfor[qqContentAttr, qqHandlerInfor, qqContentSet], 1)
-
-		cmd := exec.Command(sourceAddress + entrance + "/go-cqhttp_windows_amd64.exe")
-		var stdout, stderr bytes.Buffer
-		cmd.Stdout = &stdout 
-		cmd.Stderr = &stderr 
-		err1 := cmd.Run()
-		outStr, errStr := string(stdout.Bytes()), string(stderr.Bytes())
-		if err1 != nil {
-			return nil, err1
+		task.execution = func() error {
+			return nil
+		} // 尚待施工
+		uploadChannel := make(chan transInfor[qqContentAttr, qqHandlerInfor, qqContentSet], 1)
+		downloadChannel := make(chan transInfor[qqContentAttr, qqHandlerInfor, qqContentSet], 1)
+		task.uploadChannel = &uploadChannel
+		task.downloadChannel = &downloadChannel
+		pid, startErr := os.StartProcess(sourceAddress+entrance+"/go-cqhttp_windows_amd64.exe", make([]string, 1), &os.ProcAttr{})
+		if startErr != nil {
+			return nil, startErr
 		}
-		fileOperater("../qq/qqLog.txt", fileOperaterOptions{operater: "write", regexp: ".*", replacement: returnLog(outStr), createble: true})
-		fileOperater("../qq/qqLog.txt", fileOperaterOptions{operater: "write", regexp: ".*", replacement: returnLog(errStr), createble: true})
-		return nil, nil
+		task.processId = strconv.Itoa(pid.Pid)
+		conn, connErr := kcp.Dial("127.0.0.1:" + portInfor[0])
+		if connErr != nil {
+			return nil, connErr
+		}
+		QQGwsHandler := QQGwsHandler{logAddr: sourceAddress + entrance + "/log.txt", downloadChannel: task.downloadChannel}
+		app, _, gwsErr := gws.NewClientFromConn(&QQGwsHandler,nil,conn)
+		if gwsErr != nil {
+			return nil, gwsErr
+		}
+		go app.ReadLoop()
+		return &task, nil 
 	}
 }
 
