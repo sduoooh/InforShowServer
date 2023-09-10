@@ -20,12 +20,12 @@ type transInfor[A any, I any, C any] struct {
 }
 
 type taskInfor[A any, I any, C any, U any] struct {
-	occupiedPort    []string                 // the port that the task occupied
-	userIdInfor     U                        // should add the identifier of the app' user , such as the userid and userpassword and so on
-	processId       string                   // the process id of the task
+	occupiedPort    []string                  // the port that the task occupied
+	userIdInfor     U                         // should add the identifier of the app' user , such as the userid and userpassword and so on
+	processId       string                    // the process id of the task
 	uploadChannel   *chan transInfor[A, I, C] // the channel to upload the infor
 	downloadChannel *chan transInfor[A, I, C] // the channel to download the infor
-	execution       func()             // control the task life
+	execution       func() error              // control the task life
 }
 
 type taskMasterInfor[A any, I any, C any, U any] struct {

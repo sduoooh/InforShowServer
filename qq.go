@@ -2,12 +2,13 @@ package main
 
 import (
 	"errors"
-	"github.com/lxzan/gws"
-	kcp "github.com/xtaci/kcp-go"
-	"os"
+	"fmt"
+	"os/exec"
 	"regexp"
 	"strconv"
-	"fmt"
+
+	"github.com/lxzan/gws"
+	kcp "github.com/xtaci/kcp-go"
 )
 
 // 注意，为方便传递，qq中的id都是int类型，但是本程序内部传递的id为string.
@@ -53,7 +54,7 @@ func readPort(url string) (string, error) {
 
 type QQGwsHandler struct {
 	gws.BuiltinEventHandler
-	logAddr string
+	logAddr         string
 	downloadChannel *chan transInfor[qqContentAttr, qqHandlerInfor, qqContentSet]
 }
 
@@ -91,35 +92,42 @@ func creater(sourceAddress string, occupiedPort *map[string]portInfor) func(stri
 		task.occupiedPort[0] = portInfor[0]
 		userId, _ := strconv.Atoi(entrance)
 		task.userIdInfor = qqUserIdInfor{userId}
-		task.execution = func() {
-		} // 尚待施工
 		uploadChannel := make(chan transInfor[qqContentAttr, qqHandlerInfor, qqContentSet], 1)
 		downloadChannel := make(chan transInfor[qqContentAttr, qqHandlerInfor, qqContentSet], 1)
 		task.uploadChannel = &uploadChannel
 		task.downloadChannel = &downloadChannel
-		pid, startErr := os.StartProcess(sourceAddress+entrance+"/go-cqhttp_windows_amd64.exe", []string{"-faststart"}, &os.ProcAttr{})  // 不能为空参，尚待解决
+		cmd := exec.Command(sourceAddress + entrance + "/go-cqhttp_windows_amd64.exe")
+		startErr := cmd.Start()
 		if startErr != nil {
-			return nil, startErr
+			return nil, errors.New(startErr.Error())
 		}
-		task.processId = strconv.Itoa(pid.Pid)
+		pid := cmd.Process.Pid
+		task.processId = strconv.Itoa(pid)
+		task.execution = func() error {
+			exitErr := cmd.Cancel()
+			if exitErr != nil {
+				return errors.New(exitErr.Error())
+			}
+			return nil
+		}
 		conn, connErr := kcp.Dial("127.0.0.1:" + portInfor[0])
 		if connErr != nil {
-			return nil, connErr
+			return nil, errors.New(connErr.Error())
 		}
 		QQGwsHandler := QQGwsHandler{logAddr: sourceAddress + entrance + "/log.txt", downloadChannel: task.downloadChannel}
-		app, _, gwsErr := gws.NewClientFromConn(&QQGwsHandler,nil,conn)
+		app, _, gwsErr := gws.NewClientFromConn(&QQGwsHandler, nil, conn) //handshake 出了 timeout 问题，暂时不知道怎么解决
 		if gwsErr != nil {
-			return nil, gwsErr
+			return nil, errors.New(gwsErr.Error())
 		}
 		go app.ReadLoop()
-		return &task, nil 
+		return &task, nil
 	}
 }
 
-func qqServerInit() (*taskMasterInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor],error) {
+func qqServerInit() (*taskMasterInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor], error) {
 	qqMap, err := fileOperater("../qq/qqMap.txt", fileOperaterOptions{operater: "read", createble: false})
 	if err != nil {
-		return nil ,errors.New("can't read qqMap.txt")
+		return nil, errors.New("can't read qqMap.txt")
 	}
 	temp := dataStruct{make(map[string]string)}
 	temp.load(qqMap[0])
