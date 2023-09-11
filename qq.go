@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strconv"
+	"time"
 
 	"github.com/lxzan/gws"
 	kcp "github.com/xtaci/kcp-go"
@@ -78,6 +79,15 @@ func (h *QQGwsHandler) OnMessage(c *gws.Conn, message *gws.Message) {
 	}
 }
 
+func lookPath (file string) (string) {
+	path, lookPathErr := exec.LookPath(file)
+	if lookPathErr != nil {
+		panic(lookPathErr)
+	}
+	fmt.Println(path)
+	return path
+}
+
 func creater(sourceAddress string, occupiedPort *map[string]portInfor) func(string) (*taskInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor], error) {
 	return func(entrance string) (*taskInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor], error) {
 		// 尚待施工，需要先确定特定环境文件夹内容构造；
@@ -96,18 +106,28 @@ func creater(sourceAddress string, occupiedPort *map[string]portInfor) func(stri
 		downloadChannel := make(chan transInfor[qqContentAttr, qqHandlerInfor, qqContentSet], 1)
 		task.uploadChannel = &uploadChannel
 		task.downloadChannel = &downloadChannel
-		cmd := exec.Command(sourceAddress + entrance + "/go-cqhttp_windows_amd64.exe")
-		startErr := cmd.Start()
-		if startErr != nil {
-			return nil, errors.New(startErr.Error())
+		cmd := exec.Command("/go-cqhttp_windows_amd64.exe") //exit status 1
+		cmd.Dir = sourceAddress + entrance
+		output, outputErr := cmd.Output()
+		fmt.Println()
+		if outputErr != nil {
+			return nil, errors.New(outputErr.Error())
 		}
+		output2, err2 := exec.Command(lookPath("ps"), "go-cqhttp_windows_amd64").Output()
+		if err2 != nil {
+			return nil, errors.New(err2.Error() + "2")
+		}
+		fmt.Println(string(output))
+		fmt.Println(string(output2))
+		time.Sleep(10000 * time.Second)
 		pid := cmd.Process.Pid
 		task.processId = strconv.Itoa(pid)
+		fmt.Println(task.processId)
 		task.execution = func() error {
 			exitErr := cmd.Cancel()
 			if exitErr != nil {
 				return errors.New(exitErr.Error())
-			}
+			}	
 			return nil
 		}
 		conn, connErr := kcp.Dial("127.0.0.1:" + portInfor[0])
