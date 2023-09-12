@@ -9,4 +9,8 @@ func main() {
 	if addTaskError != nil {
 		panic(addTaskError)
 	}
+
+	for {
+		
+	}
 }

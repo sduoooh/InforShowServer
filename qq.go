@@ -3,8 +3,8 @@ package main
 import (
 	"errors"
 	"fmt"
-	"regexp"
 	"strconv"
+	"time"
 
 	"github.com/lxzan/gws"
 )
@@ -41,15 +41,6 @@ type qqUserIdInfor struct {
 	userId int
 }
 
-func readPort(url string) (string, error) {
-	re, _ := regexp.Compile(url + "config.yml")
-	data, err := fileOperater(url+"config.yml", fileOperaterOptions{operater: "read"})
-	if err != nil {
-		return "-1", err
-	}
-	return re.FindStringSubmatch(data[0])[1], nil
-}
-
 type QQGwsHandler struct {
 	gws.BuiltinEventHandler
 	logAddr         string
@@ -61,8 +52,6 @@ func (h *QQGwsHandler) OnMessage(c *gws.Conn, message *gws.Message) {
 	opcode := message.Opcode
 	payload := message.Data
 
-	fmt.Println("receive message")
-	fmt.Println(payload.String())
 	// 根据不同的消息类型进行处理
 	switch opcode {
 	case gws.OpcodeText:
@@ -76,14 +65,6 @@ func (h *QQGwsHandler) OnMessage(c *gws.Conn, message *gws.Message) {
 	default:
 		panic(errors.New("unknown opcode"))
 	}
-}
-
-func (h *QQGwsHandler) OnClose(c *gws.Conn, err error) {
-	fmt.Println("close")
-}
-
-func (h *QQGwsHandler) OnOpen(c *gws.Conn) {
-	fmt.Println("open")
 }
 
 func creater(sourceAddress string, occupiedPort *map[string]portInfor) func(string) (*taskInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor], error) {
@@ -125,16 +106,15 @@ func creater(sourceAddress string, occupiedPort *map[string]portInfor) func(stri
 			}
 			return nil
 		}
+		time.Sleep(8 * time.Second) // 必要的时延，包括启动的5秒在内
 
 		// 连接进程
-		// 当前进度： 连接成功，但是OnMessage函数无法被调用,不知何原因；
-		// 同时OnOpen、OnClose函数也无法被调用
 		QQGwsHandler := QQGwsHandler{logAddr: sourceAddress + entrance + "/log.txt", downloadChannel: task.downloadChannel}
 		app, _, gwsErr := gws.NewClient(&QQGwsHandler, &gws.ClientOption{Addr: "ws://127.0.0.1:" + portInfor[0]})
 		if gwsErr != nil {
 			return nil, errors.New(gwsErr.Error()+ "gws error")
 		}
-		go app.ReadLoop()
+		go app.ReadLoop()  
 
 		return &task, nil
 	}
