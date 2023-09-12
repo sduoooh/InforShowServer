@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"regexp"
 	"strconv"
-	"time"
 
 	"github.com/lxzan/gws"
 	kcp "github.com/xtaci/kcp-go"
@@ -106,38 +105,33 @@ func creater(sourceAddress string, occupiedPort *map[string]portInfor) func(stri
 		downloadChannel := make(chan transInfor[qqContentAttr, qqHandlerInfor, qqContentSet], 1)
 		task.uploadChannel = &uploadChannel
 		task.downloadChannel = &downloadChannel
-		cmd := exec.Command("/go-cqhttp_windows_amd64.exe") //exit status 1
+		cmd := exec.Command(lookPath("cmd"),"/c", "go-cqhttp_windows_amd64.exe")
 		cmd.Dir = sourceAddress + entrance
-		output, outputErr := cmd.Output()
-		fmt.Println()
-		if outputErr != nil {
-			return nil, errors.New(outputErr.Error())
-		}
-		output2, err2 := exec.Command(lookPath("ps"), "go-cqhttp_windows_amd64").Output()
+		cmd.Start()
+		output2, err2 := exec.Command(lookPath("ps"), "go-cqhttp_windows_amd64").StdoutPipe()
 		if err2 != nil {
 			return nil, errors.New(err2.Error() + "2")
 		}
-		fmt.Println(string(output))
-		fmt.Println(string(output2))
-		time.Sleep(10000 * time.Second)
-		pid := cmd.Process.Pid
-		task.processId = strconv.Itoa(pid)
-		fmt.Println(task.processId)
+		read := make([]byte, 1000)
+		output2.Read(read)
+		fmt.Println(string(read))
+
 		task.execution = func() error {
-			exitErr := cmd.Cancel()
-			if exitErr != nil {
-				return errors.New(exitErr.Error())
-			}	
+			killCmd, killErr := exec.Command(lookPath("kill"), task.processId).Output()
+			if killErr != nil {
+				return errors.New(killErr.Error() + "kill error")
+			}
+			fmt.Println(string(killCmd))
 			return nil
 		}
 		conn, connErr := kcp.Dial("127.0.0.1:" + portInfor[0])
 		if connErr != nil {
-			return nil, errors.New(connErr.Error())
+			return nil, errors.New(connErr.Error() + "conn error")
 		}
 		QQGwsHandler := QQGwsHandler{logAddr: sourceAddress + entrance + "/log.txt", downloadChannel: task.downloadChannel}
 		app, _, gwsErr := gws.NewClientFromConn(&QQGwsHandler, nil, conn) //handshake 出了 timeout 问题，暂时不知道怎么解决
 		if gwsErr != nil {
-			return nil, errors.New(gwsErr.Error())
+			return nil, errors.New(gwsErr.Error()+ "gws error")
 		}
 		go app.ReadLoop()
 		return &task, nil
