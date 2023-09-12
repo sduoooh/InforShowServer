@@ -73,9 +73,6 @@ func (taskMaster *taskMasterInfor[A, I, C, U]) addTask(taskId string) error {
 
 func (taskMaster *taskMasterInfor[A, I, C, U]) deleteTask(taskId string) error {
 	taskMaster.existTask[taskId].execution()
-	// if deleteError != nil {
-	// 	return deleteError
-	// }
 	for _, i := range taskMaster.existTask[taskId].occupiedPort {
 		delete(taskMaster.occupiedPort, i)
 	}

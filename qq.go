@@ -3,12 +3,10 @@ package main
 import (
 	"errors"
 	"fmt"
-	"os/exec"
 	"regexp"
 	"strconv"
 
 	"github.com/lxzan/gws"
-	kcp "github.com/xtaci/kcp-go"
 )
 
 // 注意，为方便传递，qq中的id都是int类型，但是本程序内部传递的id为string.
@@ -63,6 +61,8 @@ func (h *QQGwsHandler) OnMessage(c *gws.Conn, message *gws.Message) {
 	opcode := message.Opcode
 	payload := message.Data
 
+	fmt.Println("receive message")
+	fmt.Println(payload.String())
 	// 根据不同的消息类型进行处理
 	switch opcode {
 	case gws.OpcodeText:
@@ -78,62 +78,64 @@ func (h *QQGwsHandler) OnMessage(c *gws.Conn, message *gws.Message) {
 	}
 }
 
-func lookPath (file string) (string) {
-	path, lookPathErr := exec.LookPath(file)
-	if lookPathErr != nil {
-		panic(lookPathErr)
-	}
-	fmt.Println(path)
-	return path
+func (h *QQGwsHandler) OnClose(c *gws.Conn, err error) {
+	fmt.Println("close")
+}
+
+func (h *QQGwsHandler) OnOpen(c *gws.Conn) {
+	fmt.Println("open")
 }
 
 func creater(sourceAddress string, occupiedPort *map[string]portInfor) func(string) (*taskInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor], error) {
 	return func(entrance string) (*taskInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor], error) {
-		// 尚待施工，需要先确定特定环境文件夹内容构造；
 		// 目前认为还需使在其中读取一些信息，如预期使用的端口号及qq号等，后期或许在此预读数据库
+		
+
+		// 创建task
 		task := taskInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor]{}
-		fmt.Println(sourceAddress + entrance + "/qqPortList.txt")
+		uploadChannel := make(chan transInfor[qqContentAttr, qqHandlerInfor, qqContentSet], 1)
+		downloadChannel := make(chan transInfor[qqContentAttr, qqHandlerInfor, qqContentSet], 1)
+		task.occupiedPort = make([]string, 1)
+
+		task.uploadChannel = &uploadChannel
+		task.downloadChannel = &downloadChannel
+
 		portInfor, err := fileOperater(sourceAddress+entrance+"/qqPortList.txt", fileOperaterOptions{operater: "read", createble: false})
 		if err != nil {
 			return nil, errors.New("can't read qqPortList")
 		}
-		task.occupiedPort = make([]string, 1)
 		task.occupiedPort[0] = portInfor[0]
-		userId, _ := strconv.Atoi(entrance)
-		task.userIdInfor = qqUserIdInfor{userId}
-		uploadChannel := make(chan transInfor[qqContentAttr, qqHandlerInfor, qqContentSet], 1)
-		downloadChannel := make(chan transInfor[qqContentAttr, qqHandlerInfor, qqContentSet], 1)
-		task.uploadChannel = &uploadChannel
-		task.downloadChannel = &downloadChannel
-		cmd := exec.Command(lookPath("cmd"),"/c", "go-cqhttp_windows_amd64.exe")
-		cmd.Dir = sourceAddress + entrance
-		cmd.Start()
-		output2, err2 := exec.Command(lookPath("ps"), "go-cqhttp_windows_amd64").StdoutPipe()
-		if err2 != nil {
-			return nil, errors.New(err2.Error() + "2")
+
+		userId, getUserIdErr := strconv.Atoi(entrance)
+		if getUserIdErr != nil {
+			return nil, errors.New(getUserIdErr.Error() + "getUserId error")
 		}
-		read := make([]byte, 1000)
-		output2.Read(read)
-		fmt.Println(string(read))
+		task.userIdInfor = qqUserIdInfor{userId}
+
+		pid, startErr := start("go-cqhttp_windows_amd64.exe", sourceAddress + entrance)
+		if startErr != nil {
+			return nil, errors.New(startErr.Error() + "start error")
+		}
+		task.processId = pid
 
 		task.execution = func() error {
-			killCmd, killErr := exec.Command(lookPath("kill"), task.processId).Output()
+			killErr := kill(task.processId)
 			if killErr != nil {
 				return errors.New(killErr.Error() + "kill error")
 			}
-			fmt.Println(string(killCmd))
 			return nil
 		}
-		conn, connErr := kcp.Dial("127.0.0.1:" + portInfor[0])
-		if connErr != nil {
-			return nil, errors.New(connErr.Error() + "conn error")
-		}
+
+		// 连接进程
+		// 当前进度： 连接成功，但是OnMessage函数无法被调用,不知何原因；
+		// 同时OnOpen、OnClose函数也无法被调用
 		QQGwsHandler := QQGwsHandler{logAddr: sourceAddress + entrance + "/log.txt", downloadChannel: task.downloadChannel}
-		app, _, gwsErr := gws.NewClientFromConn(&QQGwsHandler, nil, conn) //handshake 出了 timeout 问题，暂时不知道怎么解决
+		app, _, gwsErr := gws.NewClient(&QQGwsHandler, &gws.ClientOption{Addr: "ws://127.0.0.1:" + portInfor[0]})
 		if gwsErr != nil {
 			return nil, errors.New(gwsErr.Error()+ "gws error")
 		}
 		go app.ReadLoop()
+
 		return &task, nil
 	}
 }
@@ -143,9 +145,7 @@ func qqServerInit() (*taskMasterInfor[qqContentAttr, qqHandlerInfor, qqContentSe
 	if err != nil {
 		return nil, errors.New("can't read qqMap.txt")
 	}
-	temp := dataStruct{make(map[string]string)}
-	temp.load(qqMap[0])
-	entranceList := temp.data
+	entranceList := dataLoad(qqMap[0])
 	qqTaskMaster := taskMasterInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor]{}
 	qqTaskMaster.init("qq", "../qq/", entranceList, creater)
 	return &qqTaskMaster, nil
