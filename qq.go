@@ -9,7 +9,6 @@ import (
 	"github.com/lxzan/gws"
 )
 
-// 注意，为方便传递，qq中的id都是int类型，但是本程序内部传递的id为string.
 // 尚待与abstract协同完善
 
 type qqContentAttr struct {
