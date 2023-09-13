@@ -3,8 +3,8 @@ package main
 import (
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
+	"regexp"
 
 	"github.com/lxzan/gws"
 )
@@ -22,23 +22,21 @@ type qqContentAttr struct {
 type qqHandlerInfor struct {
 
 	// nil if isGroup is false
-	groupId   int
+	groupId   string
 	groupName string
 
 	// always not nil
-	userId   int
+	userId   string
 	userName string
 }
 
 type qqContentSet struct {
-	text string
-
 	// nil if isRichText is false
-	richText []string // if some rich text exists, such as pics or videos, it will be stored in this slice
+	richText string // if some rich text exists, such as pics or videos, it will be stored in this slice
 }
 
 type qqUserIdInfor struct {
-	userId int
+	userId string
 }
 
 type QQGwsHandler struct {
@@ -47,21 +45,42 @@ type QQGwsHandler struct {
 	downloadChannel *chan transInfor[qqContentAttr, qqHandlerInfor, qqContentSet]
 }
 
+type qqMessage struct {
+	data map[string]interface{}
+}
+
+// 在当前需求下，直接拿正则取效果更好，参见：https://github.com/sduoooh/GoJsonDataTest
+// "和\前会加\，以此判断
+// []会用ASCII码表示，可以直接取
+
+var postTypeGetter = regexp.MustCompile(`"post_type":"(.*?)(?:\\\\)*"`)
+var messageGetter = regexp.MustCompile(`"message":"(.*?)(?:\\\\)*"`)
+
+
 func (h *QQGwsHandler) OnMessage(c *gws.Conn, message *gws.Message) {
 	// 获取消息类型和内容
 	opcode := message.Opcode
-	payload := message.Data
+	payload := message.Data.String()
 
 	// 根据不同的消息类型进行处理
 	switch opcode {
 	case gws.OpcodeText:
-		fmt.Println(payload.String())
+		switch postTypeGetter.FindStringSubmatch(payload)[1] {
+		case "message":
+
+			// todo： 针对键名拿数据，然后放chan里
+			fmt.Println(messageGetter.FindStringSubmatch(payload)[1])
+
+		default:
+			fmt.Println("unsupported message type: ", postTypeGetter.FindStringSubmatch(payload)[1])
+		}
+
 	case gws.OpcodeBinary:
 		log, err := fileOperater(h.logAddr, fileOperaterOptions{operater: "read"})
 		if err != nil {
 			panic(err)
 		}
-		fileOperater(h.logAddr, fileOperaterOptions{operater: "write", regexp: ".*", replacement: log[0] + payload.String()})
+		fileOperater(h.logAddr, fileOperaterOptions{operater: "write", regexp: ".*", replacement: log[0] + payload})
 	default:
 		panic(errors.New("unknown opcode"))
 	}
@@ -87,10 +106,7 @@ func creater(sourceAddress string, occupiedPort *map[string]portInfor) func(stri
 		}
 		task.occupiedPort[0] = portInfor[0]
 
-		userId, getUserIdErr := strconv.Atoi(entrance)
-		if getUserIdErr != nil {
-			return nil, errors.New(getUserIdErr.Error() + "getUserId error")
-		}
+		userId := entrance
 		task.userIdInfor = qqUserIdInfor{userId}
 
 		pid, startErr := start("go-cqhttp_windows_amd64.exe", sourceAddress + entrance)
