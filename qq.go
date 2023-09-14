@@ -1,10 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 	"regexp"
+	"time"
 
 	"github.com/lxzan/gws"
 )
@@ -15,7 +16,6 @@ type qqContentAttr struct {
 	isGroup     bool
 	isPrivate   bool
 	isAnonymity bool
-	isRichText  bool
 }
 
 type qqHandlerInfor struct {
@@ -30,8 +30,7 @@ type qqHandlerInfor struct {
 }
 
 type qqContentSet struct {
-	// nil if isRichText is false
-	richText string // if some rich text exists, such as pics or videos, it will be stored in this slice
+	text string
 }
 
 type qqUserIdInfor struct {
@@ -41,11 +40,7 @@ type qqUserIdInfor struct {
 type QQGwsHandler struct {
 	gws.BuiltinEventHandler
 	logAddr         string
-	downloadChannel *chan transInfor[qqContentAttr, qqHandlerInfor, qqContentSet]
-}
-
-type qqMessage struct {
-	data map[string]interface{}
+	downloadChannel chan transInfor[qqContentAttr, qqHandlerInfor, qqContentSet]
 }
 
 // 在当前需求下，直接拿正则取效果更好，参见：https://github.com/sduoooh/GoJsonDataTest
@@ -54,7 +49,13 @@ type qqMessage struct {
 
 var postTypeGetter = regexp.MustCompile(`"post_type":"(.*?)(?:\\\\)*"`)
 var messageGetter = regexp.MustCompile(`"message":"(.*?)(?:\\\\)*"`)
-
+var timeGetter = regexp.MustCompile(`"time":([0-9]{10})`)
+var messageTypeGetter = regexp.MustCompile(`"message_type":"(.*?)(?:\\\\)*"`)
+var subTypeGetter = regexp.MustCompile(`"sub_type":"(.*?)(?:\\\\)*"`)
+var groupIdGetter = regexp.MustCompile(`"group_id":([0-9]+)`)
+var userIdGetter = regexp.MustCompile(`"user_id":([0-9]+)`)
+var nicknameGetter = regexp.MustCompile(`"nickname":"(.*?)(?:\\\\)*"`)
+var targetIdGetter = regexp.MustCompile(`"target_id":([0-9]+)`)
 
 func (h *QQGwsHandler) OnMessage(c *gws.Conn, message *gws.Message) {
 	// 获取消息类型和内容
@@ -69,6 +70,37 @@ func (h *QQGwsHandler) OnMessage(c *gws.Conn, message *gws.Message) {
 
 			// todo： 针对键名拿数据，然后放chan里
 			fmt.Println(messageGetter.FindStringSubmatch(payload)[1])
+			isGroup := messageTypeGetter.FindStringSubmatch(payload)[1] == "group"
+
+			// 私聊则无群id
+			if !isGroup {
+				payload += "\"group_id\":" + "0"
+			}
+
+			transInfors := transInfor[qqContentAttr, qqHandlerInfor, qqContentSet]{
+				isUpload:    false,
+				accesssTime: timeGetter.FindStringSubmatch(payload)[1],
+				contentAttr: qqContentAttr{
+					isGroup:     isGroup,
+					isPrivate:   messageTypeGetter.FindStringSubmatch(payload)[1] == "private",
+					isAnonymity: subTypeGetter.FindStringSubmatch(payload)[1] == "anonymous",
+				},
+				pusherIdInfor: qqHandlerInfor{
+					userId:    userIdGetter.FindStringSubmatch(payload)[1],
+					userName:  nicknameGetter.FindStringSubmatch(payload)[1],
+					groupId:   groupIdGetter.FindStringSubmatch(payload)[1], 
+					groupName: "无", // 尚待支持，考虑http请求或者直接在websocket里询问
+				},
+				getterIdInfor: qqHandlerInfor{
+					// 其他不需要
+					userId: targetIdGetter.FindStringSubmatch(payload)[1],
+				},
+				contentSet: qqContentSet{
+					text: payload,
+				},
+			}
+			h.downloadChannel <- transInfors
+			fmt.Println("send to channel", transInfors)
 
 		default:
 			fmt.Println("unsupported message type: ", postTypeGetter.FindStringSubmatch(payload)[1])
@@ -85,19 +117,17 @@ func (h *QQGwsHandler) OnMessage(c *gws.Conn, message *gws.Message) {
 	}
 }
 
-func creater(sourceAddress string, occupiedPort *map[string]portInfor) func(string) (*taskInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor], error) {
+func creater(sourceAddress string, occupiedPort *map[string]portInfor, innerGetter, innerUpper chan transInfor[qqContentAttr, qqHandlerInfor, qqContentSet]) func(string) (*taskInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor], error) {
 	return func(entrance string) (*taskInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor], error) {
 		// 目前认为还需使在其中读取一些信息，如预期使用的端口号及qq号等，后期或许在此预读数据库
-		
 
 		// 创建task
+		// 下载信息最大缓存10条
 		task := taskInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor]{}
-		uploadChannel := make(chan transInfor[qqContentAttr, qqHandlerInfor, qqContentSet], 1)
-		downloadChannel := make(chan transInfor[qqContentAttr, qqHandlerInfor, qqContentSet], 1)
 		task.occupiedPort = make([]string, 1)
 
-		task.uploadChannel = &uploadChannel
-		task.downloadChannel = &downloadChannel
+		task.uploadChannel = innerUpper
+		task.downloadChannel = innerGetter
 
 		portInfor, err := fileOperater(sourceAddress+entrance+"/qqPortList.txt", fileOperaterOptions{operater: "read", createble: false})
 		if err != nil {
@@ -108,7 +138,7 @@ func creater(sourceAddress string, occupiedPort *map[string]portInfor) func(stri
 		userId := entrance
 		task.userIdInfor = qqUserIdInfor{userId}
 
-		pid, startErr := start("go-cqhttp_windows_amd64.exe", sourceAddress + entrance)
+		pid, startErr := start("go-cqhttp_windows_amd64.exe", sourceAddress+entrance)
 		if startErr != nil {
 			return nil, errors.New(startErr.Error() + "start error")
 		}
@@ -127,21 +157,61 @@ func creater(sourceAddress string, occupiedPort *map[string]portInfor) func(stri
 		QQGwsHandler := QQGwsHandler{logAddr: sourceAddress + entrance + "/log.txt", downloadChannel: task.downloadChannel}
 		app, _, gwsErr := gws.NewClient(&QQGwsHandler, &gws.ClientOption{Addr: "ws://127.0.0.1:" + portInfor[0]})
 		if gwsErr != nil {
-			return nil, errors.New(gwsErr.Error()+ "gws error")
+			return nil, errors.New(gwsErr.Error() + "gws error")
 		}
-		go app.ReadLoop()  
+		go app.ReadLoop()
 
 		return &task, nil
 	}
 }
 
-func qqServerInit() (*taskMasterInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor], error) {
+func qqServerInit(outterUpper, outterGetter chan unionTransInfor) (*taskMasterInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor], error) {
 	qqMap, err := fileOperater("../qq/qqMap.txt", fileOperaterOptions{operater: "read", createble: false})
 	if err != nil {
 		return nil, errors.New("can't read qqMap.txt")
 	}
 	entranceList := dataLoad(qqMap[0])
 	qqTaskMaster := taskMasterInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor]{}
-	qqTaskMaster.init("qq", "../qq/", entranceList, creater)
+	qqTaskMaster.init("qq", "../qq/", entranceList, creater, outterUpper, outterGetter)
+
 	return &qqTaskMaster, nil
+}
+
+func qqServerStart(qqTaskMaster *taskMasterInfor[qqContentAttr, qqHandlerInfor, qqContentSet, qqUserIdInfor], nameList []string) (error, chan bool) {
+	end := make(chan bool, 1)
+	for _, i := range nameList {
+		addTaskError := qqTaskMaster.addTask(i)
+		if addTaskError != nil {
+			return addTaskError, nil
+		}
+	}
+	go func() {
+		for {
+			select {
+			// 有消息来，就转化为unionTransInfor，放入outterGetter
+			case qqTransInfor := <-qqTaskMaster.InnerDownloadChannel:
+				content, _ := json.Marshal(qqTransInfor) // 显然得自己写
+				unionTransInfor := unionTransInfor{
+					isUpload:   false,
+					targetApp:  "qq",
+					targetId:   qqTransInfor.getterIdInfor.userId,
+					transInfor: string(content),
+				}
+				qqTaskMaster.OuterDownloadChannel <- unionTransInfor
+				fmt.Println("qqTransInfor", unionTransInfor)
+				
+			case qqTransInfor2 := <-qqTaskMaster.OuterUploadChannel:
+				fmt.Println("qqTransInfor2", qqTransInfor2)
+				// todo
+				continue
+			case <-end:
+				for _, i := range qqTaskMaster.existTask {
+					i.execution()
+				}
+				fmt.Println("qqServer end")
+				break
+			}
+		}
+	}()
+	return nil, end
 }

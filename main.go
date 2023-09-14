@@ -1,16 +1,21 @@
 package main
 
 func main() {
-	qqTaskMaster, err := qqServerInit()
+	getterChannel := make(chan unionTransInfor, 100)
+	uploadChannel := make(chan unionTransInfor, 100)
+	qqTaskMaster, err := qqServerInit(uploadChannel, getterChannel)
 	if err != nil {
 		panic(err)
-	}
-	addTaskError := qqTaskMaster.addTask("main")
-	if addTaskError != nil {
-		panic(addTaskError)
-	}
 
+	}
+	qqTaskStartErr, _ := qqServerStart(qqTaskMaster, []string{"main"})
+	if qqTaskStartErr != nil {
+		panic(qqTaskStartErr)
+	}
+	// todo
+	// 接受signal，结束qqServer
 	for {
 		
 	}
+
 }
