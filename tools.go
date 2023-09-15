@@ -70,7 +70,6 @@ type dataStruct struct {
 	data map[string]string
 }
 
-
 // todo: 应该更改逻辑， /index/标识内外层更好， 而对于map而言显然某键是第几项是不必要的，多层map可以考虑泛型加上结构嵌入实现
 func dataLoad(file string) map[string]string {
 	d := dataStruct{make(map[string]string)}
@@ -112,22 +111,37 @@ func lookPath(file string) string {
 func start(file string, address string) (string, error) {
 	// 启动file，返回进程pid
 
-	cmd := exec.Command(lookPath("cmd"), "/c", file)
-	cmd.Dir = address
-	cmd.Start()
-	cmd2 := exec.Command("pwsh", "-Command", "(Get-Process -name " + strings.Split(file, ".")[0] + ").id")
-	cmd2.Dir = address
-	processId, err := cmd2.Output()
-	if err != nil {
-		return "-1", err
+	isLinux := false
+
+	if isLinux {
+		cmd := exec.Command("./" + file, "&")
+		cmd.Dir = address
+		cmd.Start()
+		cmd2 := exec.Command("pgrep", strings.Split(file, ".")[0])
+		cmd2.Dir = address
+		processId, err := cmd2.Output()
+		if err != nil {
+			return "-1", err
+		}
+		return string(processId), nil
+	} else {
+		cmd := exec.Command(lookPath("cmd"), "/c", file)
+		cmd.Dir = address
+		cmd.Start()
+		cmd2 := exec.Command("pwsh", "-Command", "(Get-Process -name "+strings.Split(file, ".")[0]+").id")
+		cmd2.Dir = address
+		processId, err := cmd2.Output()
+		if err != nil {
+			return "-1", err
+		}
+		return string(processId), nil
 	}
-	return string(processId), nil
 }
 
 func kill(processId string) error {
 	// 结束进程
 
-	killCmd, killErr := exec.Command("pwsh", "-Command", "Stop-Process " + processId).Output()
+	killCmd, killErr := exec.Command("pwsh", "-Command", "Stop-Process "+processId).Output()
 	if killErr != nil {
 		return killErr
 	}
